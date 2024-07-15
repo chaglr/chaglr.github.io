@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P Backgammon</title>
+    <title>Improved P2P Backgammon</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
     <style>
         body {
@@ -16,67 +16,30 @@
             background-color: #f0f0f0;
         }
         #game-container, #connection-container {
+            text-align: center;
             background-color: #fff;
             border-radius: 10px;
             padding: 20px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            max-width: 800px;
-            margin: 20px;
         }
-        #board {
-            width: 700px;
-            height: 500px;
-            background-color: #DEB887;
-            border: 2px solid #8B4513;
-            position: relative;
-            margin-bottom: 20px;
-        }
-        .point {
-            width: 50px;
-            height: 200px;
-            position: absolute;
-            cursor: pointer;
-        }
-        .point-top {
-            top: 0;
-            border-bottom: 200px solid;
-            border-left: 25px solid transparent;
-            border-right: 25px solid transparent;
-        }
-        .point-bottom {
-            bottom: 0;
-            border-top: 200px solid;
-            border-left: 25px solid transparent;
-            border-right: 25px solid transparent;
-        }
-        .checker {
-            width: 46px;
-            height: 46px;
-            border-radius: 50%;
-            position: absolute;
-            left: 2px;
-            z-index: 10;
-            transition: all 0.3s ease;
+        canvas {
+            border: 2px solid #333;
         }
         .hidden {
             display: none;
         }
-        #loading {
-            font-style: italic;
-            color: #666;
-        }
-        .selected {
-            box-shadow: 0 0 10px 5px yellow;
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
     <div id="connection-container">
-        <h2>P2P Backgammon</h2>
-        <div id="start-game-section">
-            <button id="create-game" disabled>Create New Game</button>
-            <div id="loading" class="hidden">Initializing... Please wait.</div>
-        </div>
+        <h2>Improved P2P Backgammon</h2>
+        <button id="create-game">Create New Game</button>
         <div id="join-game-section" class="hidden">
             <input type="text" id="peer-id-input" placeholder="Enter game ID">
             <button id="join-game">Join Game</button>
@@ -85,13 +48,15 @@
     </div>
     
     <div id="game-container" class="hidden">
-        <div id="board"></div>
+        <canvas id="board" width="800" height="600"></canvas>
         <button id="roll-dice">Roll Dice</button>
-        <div id="dice"></div>
+        <div id="dice-display"></div>
         <div id="message"></div>
     </div>
 
     <script>
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
         let peer;
         let conn;
         let myColor;
@@ -99,7 +64,9 @@
             points: Array(24).fill().map(() => ({ player: null, count: 0 })),
             dice: [],
             currentPlayer: 'white',
-            selectedPoint: null
+            selectedPoint: null,
+            bar: { white: 0, black: 0 },
+            off: { white: 0, black: 0 }
         };
 
         const createGameButton = document.getElementById('create-game');
@@ -109,14 +76,11 @@
         const gameIdDisplay = document.getElementById('game-id-display');
         const connectionContainer = document.getElementById('connection-container');
         const gameContainer = document.getElementById('game-container');
-        const loadingDisplay = document.getElementById('loading');
         const rollDiceButton = document.getElementById('roll-dice');
-        const diceDisplay = document.getElementById('dice');
+        const diceDisplay = document.getElementById('dice-display');
         const messageDisplay = document.getElementById('message');
-        const board = document.getElementById('board');
 
         function initializePeer() {
-            loadingDisplay.classList.remove('hidden');
             peer = new Peer({
                 config: {
                     'iceServers': [
@@ -131,11 +95,10 @@
             peer.on('open', (id) => {
                 console.log('My peer ID is: ' + id);
                 createGameButton.disabled = false;
-                loadingDisplay.classList.add('hidden');
             });
             peer.on('error', (error) => {
                 console.error('PeerJS error:', error);
-                loadingDisplay.textContent = 'Error initializing. Please refresh the page.';
+                alert('Error initializing. Please refresh the page.');
             });
         }
 
@@ -150,8 +113,7 @@
                 joinGameSection.classList.remove('hidden');
             } else {
                 console.error('Peer ID is not available');
-                loadingDisplay.textContent = 'Error creating game. Please try again.';
-                loadingDisplay.classList.remove('hidden');
+                alert('Error creating game. Please try again.');
             }
         });
 
@@ -177,7 +139,7 @@
                 connectionContainer.classList.add('hidden');
                 gameContainer.classList.remove('hidden');
                 initializeBoard();
-                updateBoard();
+                drawBoard();
                 updateTurnDisplay();
             });
 
@@ -185,7 +147,7 @@
                 console.log('Received data:', data);
                 if (data.type === 'gameState') {
                     gameState = data.state;
-                    updateBoard();
+                    drawBoard();
                     updateTurnDisplay();
                 }
             });
@@ -207,35 +169,159 @@
             gameState.points[23] = { player: 'black', count: 2 };
         }
 
-        function updateBoard() {
-            board.innerHTML = '';
+        function drawBoard() {
+            ctx.fillStyle = '#DEB887';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw points
             for (let i = 0; i < 24; i++) {
-                const point = document.createElement('div');
-                point.className = `point ${i < 12 ? 'point-bottom' : 'point-top'}`;
-                point.style.left = `${(i % 12) * 58 + (i < 12 ? 0 : 350)}px`;
-                point.style.borderColor = i % 2 === 0 ? '#8B4513' : '#D2691E';
-                point.onclick = () => handlePointClick(i);
-                
+                const x = i < 12 ? 700 - (i * 50) : (i - 12) * 50 + 50;
+                const y = i < 12 ? 300 : 0;
+                const height = 250;
+
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + 25, y + (i < 12 ? height : -height));
+                ctx.lineTo(x + 50, y);
+                ctx.fillStyle = i % 2 === 0 ? '#8B4513' : '#D2691E';
+                ctx.fill();
+
+                // Draw checkers
                 const { player, count } = gameState.points[i];
                 for (let j = 0; j < count; j++) {
-                    const checker = document.createElement('div');
-                    checker.className = 'checker';
-                    checker.style.backgroundColor = player === 'white' ? 'white' : 'black';
-                    checker.style.bottom = i < 12 ? `${j * 50}px` : 'auto';
-                    checker.style.top = i >= 12 ? `${j * 50}px` : 'auto';
-                    if (i === gameState.selectedPoint) {
-                        checker.classList.add('selected');
-                    }
-                    point.appendChild(checker);
+                    const checkerY = i < 12 ? 550 - (j * 40) : 50 + (j * 40);
+                    ctx.beginPath();
+                    ctx.arc(x + 25, checkerY, 20, 0, Math.PI * 2);
+                    ctx.fillStyle = player === 'white' ? 'white' : 'black';
+                    ctx.fill();
+                    ctx.strokeStyle = player === 'white' ? 'black' : 'white';
+                    ctx.stroke();
                 }
-                
-                board.appendChild(point);
+            }
+
+            // Draw bar
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(395, 0, 10, canvas.height);
+
+            // Draw off areas
+            ctx.fillStyle = '#D2691E';
+            ctx.fillRect(0, 0, 40, canvas.height);
+            ctx.fillRect(760, 0, 40, canvas.height);
+
+            // Draw checkers on bar
+            for (let color of ['white', 'black']) {
+                for (let i = 0; i < gameState.bar[color]; i++) {
+                    const y = color === 'white' ? 550 - (i * 40) : 50 + (i * 40);
+                    ctx.beginPath();
+                    ctx.arc(400, y, 20, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    ctx.strokeStyle = color === 'white' ? 'black' : 'white';
+                    ctx.stroke();
+                }
+            }
+
+            // Draw borne off checkers
+            for (let color of ['white', 'black']) {
+                const x = color === 'white' ? 780 : 20;
+                for (let i = 0; i < gameState.off[color]; i++) {
+                    const y = color === 'white' ? 550 - (i * 40) : 50 + (i * 40);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 20, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    ctx.strokeStyle = color === 'white' ? 'black' : 'white';
+                    ctx.stroke();
+                }
+            }
+        }
+
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            handleBoardClick(x, y);
+        });
+
+        function handleBoardClick(x, y) {
+            if (gameState.currentPlayer !== myColor || gameState.dice.length === 0) return;
+
+            let clickedPoint = -1;
+            for (let i = 0; i < 24; i++) {
+                const pointX = i < 12 ? 700 - (i * 50) : (i - 12) * 50 + 50;
+                const pointY = i < 12 ? 300 : 0;
+                if (x >= pointX && x < pointX + 50 && y >= pointY && y < pointY + 300) {
+                    clickedPoint = i;
+                    break;
+                }
+            }
+
+            if (clickedPoint === -1) return;
+
+            if (gameState.selectedPoint === null) {
+                // Select a checker
+                if (gameState.points[clickedPoint].player === myColor) {
+                    gameState.selectedPoint = clickedPoint;
+                    drawBoard();
+                }
+            } else {
+                // Move the selected checker
+                const move = Math.abs(clickedPoint - gameState.selectedPoint);
+                if (gameState.dice.includes(move) && isValidMove(gameState.selectedPoint, clickedPoint)) {
+                    moveChecker(gameState.selectedPoint, clickedPoint);
+                    gameState.dice.splice(gameState.dice.indexOf(move), 1);
+                    gameState.selectedPoint = null;
+                    
+                    if (gameState.dice.length === 0) {
+                        gameState.currentPlayer = gameState.currentPlayer === 'white' ? 'black' : 'white';
+                    }
+                    
+                    drawBoard();
+                    sendGameState();
+                } else {
+                    gameState.selectedPoint = null;
+                    drawBoard();
+                }
+            }
+        }
+
+        function isValidMove(from, to) {
+            const direction = myColor === 'white' ? 1 : -1;
+            if (direction * (to - from) < 0) return false;
+            
+            if (gameState.points[to].player && gameState.points[to].player !== myColor && gameState.points[to].count > 1) {
+                return false;
+            }
+            
+            return true;
+        }
+
+        function moveChecker(from, to) {
+            gameState.points[from].count--;
+            if (gameState.points[from].count === 0) {
+                gameState.points[from].player = null;
+            }
+            
+            if (gameState.points[to].player && gameState.points[to].player !== myColor) {
+                gameState.bar[gameState.points[to].player]++;
+                gameState.points[to].player = myColor;
+                gameState.points[to].count = 1;
+            } else {
+                if (gameState.points[to].player === null) {
+                    gameState.points[to].player = myColor;
+                    gameState.points[to].count = 1;
+                } else {
+                    gameState.points[to].count++;
+                }
             }
         }
 
         rollDiceButton.addEventListener('click', () => {
             if (gameState.currentPlayer === myColor && gameState.dice.length === 0) {
                 gameState.dice = [rollDie(), rollDie()];
+                if (gameState.dice[0] === gameState.dice[1]) {
+                    gameState.dice = gameState.dice.concat(gameState.dice);
+                }
                 diceDisplay.textContent = `Dice: ${gameState.dice.join(', ')}`;
                 sendGameState();
             }
@@ -243,45 +329,6 @@
 
         function rollDie() {
             return Math.floor(Math.random() * 6) + 1;
-        }
-
-        function handlePointClick(pointIndex) {
-            if (gameState.currentPlayer !== myColor || gameState.dice.length === 0) return;
-
-            if (gameState.selectedPoint === null) {
-                // Bir taş seç
-                if (gameState.points[pointIndex].player === myColor) {
-                    gameState.selectedPoint = pointIndex;
-                    updateBoard();
-                }
-            } else {
-                // Seçili taşı hareket ettir
-                const move = Math.abs(pointIndex - gameState.selectedPoint);
-                if (gameState.dice.includes(move)) {
-                    // Taşı hareket ettir
-                    gameState.points[gameState.selectedPoint].count--;
-                    if (gameState.points[gameState.selectedPoint].count === 0) {
-                        gameState.points[gameState.selectedPoint].player = null;
-                    }
-                    gameState.points[pointIndex].count++;
-                    gameState.points[pointIndex].player = myColor;
-
-                    // Kullanılan zarı kaldır
-                    gameState.dice.splice(gameState.dice.indexOf(move), 1);
-
-                    // Sırayı değiştir
-                    if (gameState.dice.length === 0) {
-                        gameState.currentPlayer = gameState.currentPlayer === 'white' ? 'black' : 'white';
-                    }
-
-                    gameState.selectedPoint = null;
-                    updateBoard();
-                    sendGameState();
-                } else {
-                    gameState.selectedPoint = null;
-                    updateBoard();
-                }
-            }
         }
 
         function updateTurnDisplay() {
@@ -295,6 +342,9 @@
                 conn.send({ type: 'gameState', state: gameState });
             }
         }
+
+        // Initial draw
+        drawBoard();
     </script>
 </body>
 </html>
