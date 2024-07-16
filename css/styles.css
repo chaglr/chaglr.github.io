@@ -16,30 +16,30 @@ body {
     margin: 20px;
 }
 #board {
-    width: 700px;
+    width: 580px; /* Board width adjusted */
     height: 500px;
     background-color: #DEB887;
     border: 2px solid #8B4513;
     position: relative;
     margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
 }
 .point {
-    width: 50px;
-    height: 200px;
-    position: absolute;
+    width: 48px; /* Point width adjusted */
+    height: 240px; /* Point height adjusted */
+    position: relative;
     cursor: pointer;
 }
 .point-top {
-    top: 0;
-    border-bottom: 200px solid;
-    border-left: 25px solid transparent;
-    border-right: 25px solid transparent;
+    border-bottom: 240px solid; /* Height adjusted */
+    border-left: 24px solid transparent;
+    border-right: 24px solid transparent;
 }
 .point-bottom {
-    bottom: 0;
-    border-top: 200px solid;
-    border-left: 25px solid transparent;
-    border-right: 25px solid transparent;
+    border-top: 240px solid; /* Height adjusted */
+    border-left: 24px solid transparent;
+    border-right: 24px solid transparent;
 }
 .checker {
     width: 46px;

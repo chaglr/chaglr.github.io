@@ -104,7 +104,7 @@ function updateBoard() {
     for (let i = 0; i < 24; i++) {
         const point = document.createElement('div');
         point.className = `point ${i < 12 ? 'point-bottom' : 'point-top'}`;
-        point.style.left = `${(i % 12) * 58 + (i < 12 ? 0 : 350)}px`;
+        point.style.left = `${(i % 12) * 48 + (i < 12 ? 0 : 290)}px`; /* Width adjusted */
         point.style.borderColor = i % 2 === 0 ? '#8B4513' : '#D2691E';
         point.onclick = () => handlePointClick(i);
 
@@ -121,6 +121,7 @@ function updateBoard() {
         board.appendChild(point);
     }
 }
+
 
 rollDiceButton.addEventListener('click', () => {
     if (gameState.currentPlayer === myColor && gameState.dice.length === 0) {
